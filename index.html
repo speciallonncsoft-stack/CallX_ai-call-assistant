@@ -71,7 +71,7 @@ button,a{-webkit-tap-highlight-color:transparent}
 .btn[disabled]{cursor:not-allowed;opacity:.45}
 .header{position:sticky;top:0;z-index:50;background:rgba(245,245,247,.88);border-bottom:1px solid rgba(17,17,19,.08);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .nav{min-height:var(--header-h);display:flex;align-items:center;gap:18px}
-.brand{color:var(--ink);font:700 20px/1 var(--font-en);letter-spacing:-.045em;white-space:nowrap}
+.brand{color:var(--ink);font:800 22px/1 var(--font-en);letter-spacing:-.03em;white-space:nowrap}
 .brand .accent{color:var(--cobalt)}
 .nav-links{display:flex;align-items:center;gap:22px;margin-left:28px;color:var(--muted);font-size:13px;font-weight:650}
 .nav-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
@@ -195,7 +195,7 @@ button,a{-webkit-tap-highlight-color:transparent}
   :root{--page-pad:clamp(16px,5vw,22px);--header-h:56px}
   .section{padding:64px 0 72px}
   .nav{min-height:56px}
-  .brand{font-size:18px}
+  .brand{font-size:20px}
   .nav .btn{display:none}
   .hero{padding:44px 0 48px}
   .hero-grid{display:flex;flex-direction:column;gap:28px}
@@ -203,7 +203,17 @@ button,a{-webkit-tap-highlight-color:transparent}
   .hero-sub{font-size:16px}
   .hero-actions{margin-top:24px}
   .hero-actions .btn-secondary{display:none}
-  .video-shell{min-height:400px}
+
+  /* ---- FIX: hero 이미지 셸 세로선(빈 셸) 방지 ---- */
+  .hero-side{width:100%;min-width:0}
+  .video-shell{
+    width:100%;
+    min-height:0;              /* 고정 높이 제거 → 빈 셸이 세로 막대로 남지 않음 */
+    aspect-ratio:4/5;          /* 이미지가 없어도 폭 기준으로 높이 확보 */
+  }
+  /* 이미지 src가 실제로 로드된 경우에만 셸을 표시. 로드 실패/빈 값이면 숨김 */
+  .hero-side:not(:has(.hero-image[src]:not([src=""]))) .video-shell{display:none}
+
   .risk-toast{left:12px;right:12px;bottom:12px;grid-template-columns:auto 1fr}
   .risk-state{grid-column:2}
   .hero-zeros{gap:7px}
@@ -267,7 +277,6 @@ button,a{-webkit-tap-highlight-color:transparent}
 }
 @media(max-width:380px){
   .hero h1{font-size:40px}
-  .video-shell{min-height:360px}
   #how .how-step{grid-template-columns:23px 34px minmax(0,1fr);padding:11px;column-gap:8px}
   #how .how-icon{width:34px;height:34px}
   #how .how-step h3{font-size:15px}
@@ -281,7 +290,7 @@ button,a{-webkit-tap-highlight-color:transparent}
 <body>
 <header class="header">
   <div class="container nav">
-    <a class="brand" href="#top" aria-label="AI전화비서 home">AI전화 <span class="accent">비서</span></a>
+    <a class="brand" href="#top" aria-label="CALL X home">CALL <span class="accent">X</span></a>
     <nav class="nav-links" aria-label="Main navigation">
       <a href="#how">이용 방법</a>
       <a href="#survey">설문 참여</a>
@@ -495,7 +504,7 @@ button,a{-webkit-tap-highlight-color:transparent}
 
 <footer class="footer">
   <div class="container footer-inner">
-    <span>© 2026 AI전화비서. Concept prototype.</span>
+    <span>© 2026 CALL X. Concept prototype.</span>
     <span>본 페이지는 컨셉 검증용 랜딩입니다.</span>
   </div>
 </footer>
@@ -702,6 +711,17 @@ button,a{-webkit-tap-highlight-color:transparent}
   }
   addEventListener('scroll', updateSticky, {passive:true});
   addEventListener('resize', updateSticky, {passive:true});
+
+  // ---- hero 이미지 로드 실패 시 셸 숨김 (:has() 미지원 브라우저 폴백) ----
+  const heroImg = $('.hero-image');
+  const heroShell = $('.video-shell');
+  function hideHeroShell(){ if(heroShell) heroShell.style.display='none'; }
+  if(heroImg && heroShell){
+    if(!heroImg.getAttribute('src')) hideHeroShell();
+    heroImg.addEventListener('error', hideHeroShell);
+    // 이미 캐시로 로드 시도됐지만 실패(broken)한 경우 처리
+    if(heroImg.complete && heroImg.naturalWidth===0) hideHeroShell();
+  }
 
   prevBtn.textContent = COPY.prev;
   nextBtn.textContent = COPY.next;
