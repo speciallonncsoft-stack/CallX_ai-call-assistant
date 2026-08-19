@@ -203,17 +203,13 @@ button,a{-webkit-tap-highlight-color:transparent}
   .hero-sub{font-size:16px}
   .hero-actions{margin-top:24px}
   .hero-actions .btn-secondary{display:none}
-
-  /* ---- FIX: hero 이미지 셸 세로선(빈 셸) 방지 ---- */
   .hero-side{width:100%;min-width:0}
   .video-shell{
     width:100%;
-    min-height:0;              /* 고정 높이 제거 → 빈 셸이 세로 막대로 남지 않음 */
-    aspect-ratio:4/5;          /* 이미지가 없어도 폭 기준으로 높이 확보 */
+    min-height:0;
+    aspect-ratio:4/5;
   }
-  /* 이미지 src가 실제로 로드된 경우에만 셸을 표시. 로드 실패/빈 값이면 숨김 */
   .hero-side:not(:has(.hero-image[src]:not([src=""]))) .video-shell{display:none}
-
   .risk-toast{left:12px;right:12px;bottom:12px;grid-template-columns:auto 1fr}
   .risk-state{grid-column:2}
   .hero-zeros{gap:7px}
@@ -518,6 +514,9 @@ button,a{-webkit-tap-highlight-color:transparent}
 (() => {
   'use strict';
 
+  /* 📝 이 랜딩페이지 고유 ID — 페이지마다 반드시 다르게! (Neon survey_responses.site 컬럼에 저장됨) */
+  const SITE_ID = 'kr-ai-call-assistant';
+
   const SURVEY = [
     {
       id:'pain_point',
@@ -642,6 +641,7 @@ button,a{-webkit-tap-highlight-color:transparent}
 
   function payload(){
     return {
+      site: SITE_ID,
       language:'ko',
       answers:{ ...state.answers },
       website: $('#website')?.value || '',
@@ -656,11 +656,10 @@ button,a{-webkit-tap-highlight-color:transparent}
     const isLocal = location.protocol==='file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     if(isLocal){ console.log('[LANDING] local survey preview', data); setTimeout(()=>showSuccess(false),250); return; }
     try{
-      const res = await fetch('/api/survey', {
+      const res = await fetch('/api/submit', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
       });
-      const result = await res.json().catch(()=>({}));
-      if(!res.ok || !result.ok) throw new Error(result.error || `HTTP ${res.status}`);
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
       showSuccess(true);
     }catch(err){
       console.error('[LANDING] survey save failed', err);
@@ -712,14 +711,12 @@ button,a{-webkit-tap-highlight-color:transparent}
   addEventListener('scroll', updateSticky, {passive:true});
   addEventListener('resize', updateSticky, {passive:true});
 
-  // ---- hero 이미지 로드 실패 시 셸 숨김 (:has() 미지원 브라우저 폴백) ----
   const heroImg = $('.hero-image');
   const heroShell = $('.video-shell');
   function hideHeroShell(){ if(heroShell) heroShell.style.display='none'; }
   if(heroImg && heroShell){
     if(!heroImg.getAttribute('src')) hideHeroShell();
     heroImg.addEventListener('error', hideHeroShell);
-    // 이미 캐시로 로드 시도됐지만 실패(broken)한 경우 처리
     if(heroImg.complete && heroImg.naturalWidth===0) hideHeroShell();
   }
 
