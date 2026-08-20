@@ -1,72 +1,51 @@
 /* ============================================================================
-   tracking.js  —  GA4 이벤트 추적 (랜딩페이지 공용)
+   tracking.js  —  GA4 이벤트 추적 (랜딩페이지 4종 공용)
    ----------------------------------------------------------------------------
-   이 파일 하나로 모든 랜딩페이지의 GA4 추적이 처리됩니다.
+   이 파일 하나를 4개 랜딩페이지가 그대로 공유합니다.
    각 HTML은 </body> 앞에 <script src="tracking.js"></script> 한 줄만 있으면 됨.
+   ★ HTML <head> 에 별도의 gtag 스니펫(<!-- Google tag -->)을 넣지 마세요.
+     이 파일이 gtag 로드와 초기화(config)를 스스로 처리하므로,
+     따로 넣으면 이중 로드되어 데이터가 꼬입니다.
 
-   ▣ 딱 하나만 교체하세요 (선배가 GA4 측정 ID 주면):
-        아래 GA4_ID 값의 "G-XXXXXXXXXX" 를 실제 ID로 바꿉니다.
-
-   ▣ 페이지 이름 문제 해결 (NEW)
-        모든 페이지가 루트(/)에 배포돼 GA 경로가 전부 '/' 로만 보이던 문제를,
-        각 페이지의 <title>을 읽어 GA에 '보기 좋은 경로 이름'으로 넘겨 해결합니다.
-        → GA4 '페이지 경로' 카드에도 /protection, /ai-call-assistant 처럼 뜹니다.
-        → HTML은 수정할 필요 없음. 이 파일 하나로 5개 페이지 전부 적용.
-
-        새 페이지를 추가하면, 아래 PAGE_MAP 에 [제목 일부, 경로이름] 한 줄만 추가.
-        매핑에 없으면 title을 자동 슬러그로 만들어 넣습니다(그래도 '/' 보단 명확).
+   ▣ 담당자 배포 전 확인 (딱 2가지)
+     1) 아래 GA4_ID 가 올바른 새 측정 ID 인지 확인 (기본값 이미 반영됨)
+     2) 본인 사이트의 실제 도메인이 아래 CONCEPT_MAP 의 키워드와 맞는지 확인
+        - familyprotection-landing.vercel.app  → protection
+        - soho-ai-answering.vercel.app         → soho_answering
+        - factcheck-landing.vercel.app         → factcheck
+        - ai-call-assistant-landing.vercel.app → ai_call_assistant
+        도메인을 바꿔서 배포하면 CONCEPT_MAP 의 키워드도 같이 고쳐야 함.
 
    ▣ 잡는 이벤트 (4개)
-        page_view / cta_click / survey_start / survey_complete
+        page_view        - 페이지 도착 (GA가 자동으로 잡음, 코드 불필요)
+        cta_click        - '#survey'로 가는 CTA 버튼 클릭 (설문 진입 의향)
+        survey_start     - 설문 첫 답 클릭 (실제 설문 진입)
+        survey_complete  - 설문 제출 성공 (전환 = 핵심 지표)
+        └ 모든 이벤트에 concept(어느 랜딩인지) 가 자동으로 함께 전송됨
+        └ survey_complete 에는 사용자가 고른 답(언어·응답값)도 함께 전송
+
+   ▣ 동작 안 하는 경우
+        - 측정 ID가 비정상(G-XXXXXXXXXX)이면 GA 전송을 건너뛰고 콘솔에만 로그.
+        - localhost/파일 열기에서도 콘솔 로그로 확인 가능.
    ============================================================================ */
 
 (function () {
   'use strict';
 
-  /* ▼▼▼ 여기만 교체 ▼▼▼ */
+  /* ▼▼▼ GA4 측정 ID (4개 랜딩 공통 단일 속성) ▼▼▼ */
   var GA4_ID = 'G-0MH9230B7L';
-  /* ▲▲▲ 여기만 교체 ▲▲▲ */
+  /* ▲▲▲ 여기만 바뀌면 전체 전송 대상이 바뀝니다 ▲▲▲ */
 
-  /* ▼▼▼ 페이지 이름 매핑 (title 에 이 문자열이 포함되면 → 해당 경로로 GA에 기록) ▼▼▼
-     - 왼쪽: 각 페이지 <title> 에 들어있는 '구분되는 문자열' (일부만 매칭돼도 됨)
-     - 오른쪽: GA4 경로 카드에 뜰 이름 (반드시 / 로 시작)
-     - 새 페이지가 생기면 여기에 한 줄만 추가하세요. */
-  var PAGE_MAP = [
-    ['가족에게 걸려온',   '/protection'],
-    ['AI전화비서',        '/ai-call-assistant'],
-    ['팩트체크',          '/factcheck'],
-    ['SOHO',             '/soho'],
-    ['Protection',        '/protection']
-  ];
-  /* ▲▲▲ 페이지 이름 매핑 ▲▲▲ */
+  /* ---- 현재 도메인이 어떤 컨셉인지 판별 (hostname 기반) ---- */
+  var host = (location.hostname || '').toLowerCase();
+  var CONCEPT =
+      host.indexOf('familyprotection') > -1 ? 'protection' :
+      host.indexOf('soho')             > -1 ? 'soho_answering' :
+      host.indexOf('factcheck')        > -1 ? 'factcheck' :
+      host.indexOf('ai-call-assistant')> -1 ? 'ai_call_assistant' :
+      'unknown';   /* 어디에도 안 맞으면 unknown 으로 들어옴 → 도메인/키워드 점검 신호 */
 
   var idReady = /^G-[A-Z0-9]+$/i.test(GA4_ID) && GA4_ID !== 'G-XXXXXXXXXX';
-
-  /* ---- title → GA 경로 이름 결정 ---- */
-  function resolvePagePath() {
-    var title = (document.title || '').trim();
-
-    // 1) 매핑에서 제목 포함 검색
-    for (var i = 0; i < PAGE_MAP.length; i++) {
-      if (title.indexOf(PAGE_MAP[i][0]) !== -1) return PAGE_MAP[i][1];
-    }
-
-    // 2) 매핑에 없으면: title 앞부분을 슬러그로 (한글/영문/숫자만, 공백→하이픈)
-    var slug = title
-      .split(/[—\-|·:]/)[0]        // 제목 구분자 앞부분만
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9가-힣\-]/g, '')
-      .slice(0, 40);
-
-    if (slug) return '/' + slug;
-
-    // 3) 그래도 없으면 실제 경로 사용 (최후의 폴백)
-    return location.pathname || '/';
-  }
-
-  var PAGE_PATH = resolvePagePath();
 
   /* ---- GA4(gtag) 로드 : ID가 준비됐을 때만 ---- */
   window.dataLayer = window.dataLayer || [];
@@ -79,21 +58,16 @@
     document.head.appendChild(s);
 
     gtag('js', new Date());
-    // page_path 를 명시해 실제 URL이 '/' 여도 GA에는 페이지 이름으로 기록되게 함.
-    // page_title 은 원래 title 그대로 유지(제목 카드도 계속 정상).
-    gtag('config', GA4_ID, {
-      page_path: PAGE_PATH,
-      page_title: document.title
-    });
+    /* config 에도 concept 를 기본값으로 실어두면 page_view 에도 concept 가 붙음 */
+    gtag('config', GA4_ID, { concept: CONCEPT });
   } else {
     console.warn('[tracking] GA4 측정 ID가 아직 없습니다. 이벤트는 콘솔에만 기록됩니다.');
   }
 
-  /* ---- 이벤트 전송 헬퍼 ---- */
+  /* ---- 이벤트 전송 헬퍼 : 모든 이벤트에 concept 자동 부착 ---- */
   function sendEvent(name, params) {
     params = params || {};
-    // 모든 이벤트에 페이지 식별자를 함께 실어, 페이지별 비교를 쉽게 함
-    params.page_path = PAGE_PATH;
+    params.concept = CONCEPT;
     if (idReady && typeof gtag === 'function') {
       gtag('event', name, params);
     }
@@ -129,13 +103,18 @@
       });
     }
 
-    /* 3) 설문 완료 : 성공 화면(#surveySuccess)에 'show' 클래스가 붙는 순간 감지 */
+    /* 3) 설문 완료 : 성공 화면(#surveySuccess)이 표시되는 순간 감지
+          - 템플릿은 완료 시 #surveySuccess 에 'show' 클래스를 추가함
+          - 그 변화를 MutationObserver 로 관찰해 1회만 전송 */
     var success = document.getElementById('surveySuccess');
     if (success && 'MutationObserver' in window) {
       var fired = false;
       var mo = new MutationObserver(function () {
         if (!fired && success.classList.contains('show')) {
           fired = true;
+
+          /* 완료 시점에 사용자가 고른 답을 함께 전송
+             (요약 화면 #surveySummary 의 값들을 읽어 담음) */
           var params = { language: document.documentElement.lang || 'ko' };
           try {
             var rows = document.querySelectorAll('#surveySummary .summary-row');
@@ -144,6 +123,7 @@
               if (val) params['answer_' + (i + 1)] = val.textContent.trim().slice(0, 90);
             });
           } catch (err) { /* 요약 못 읽어도 완료 자체는 기록 */ }
+
           sendEvent('survey_complete', params);
         }
       });
